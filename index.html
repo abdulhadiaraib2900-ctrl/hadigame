@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON RACER: DOUBLE VALUE</title>
+    <style>
+        body {
+            margin: 0;
+            background: #050505;
+            color: #fff;
+            font-family: 'Arial Black', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-board {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background: #111;
+            border: 4px solid #333;
+            background-image: linear-gradient(90deg, transparent 49%, #222 50%, transparent 51%);
+            background-size: 100% 80px;
+            overflow: hidden;
+            animation: roadMove 0.5s linear infinite;
+        }
+
+        @keyframes roadMove {
+            from { background-position-y: 0px; }
+            to { background-position-y: 80px; }
+        }
+
+        /* --- CAR DESIGN --- */
+        .car-body {
+            position: absolute;
+            width: 48px;
+            height: 85px;
+            border-radius: 10px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: left 0.1s ease-out;
+        }
+
+        .car-body::before {
+            content: "";
+            width: 36px;
+            height: 22px;
+            background: rgba(0, 0, 0, 0.7);
+            margin-top: 18px;
+            border-radius: 4px;
+        }
+
+        .mirrors {
+            position: absolute;
+            top: 25px;
+            width: 62px;
+            height: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .mirrors div { width: 6px; height: 8px; background: inherit; border-radius: 2px; }
+
+        #player {
+            background: #00f2ff;
+            box-shadow: 0 0 25px #00f2ff;
+            bottom: 40px;
+        }
+
+        .enemy {
+            background: #ff1100;
+            box-shadow: 0 0 20px #ff1100;
+            transform: rotate(180deg);
+        }
+
+        /* UI */
+        #ui {
+            position: absolute;
+            top: 15px; width: 100%;
+            text-align: center;
+            color: #ffcc00;
+            font-size: 22px;
+            z-index: 50;
+        }
+
+        #overlay, #shop-menu {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.95);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .shop-item {
+            background: #222;
+            padding: 15px;
+            margin: 10px;
+            width: 85%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px;
+            border-left: 5px solid #ffcc00;
+        }
+
+        button {
+            padding: 10px 15px;
+            background: #ffcc00;
+            border: none;
+            font-family: 'Arial Black';
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .coin {
+            position: absolute;
+            width: 30px; height: 30px;
+            background: #ffcc00;
+            border-radius: 50%;
+            box-shadow: 0 0 15px #ffcc00;
+            display: flex; justify-content: center; align-items: center;
+            color: #000; font-weight: bold;
+            animation: spin 0.5s infinite;
+        }
+
+        @keyframes spin { 50% { transform: scaleX(0.2); } }
+    </style>
+</head>
+<body onkeydown="handleInput(event)">
+
+    <div id="game-board" onclick="switchLane()">
+        <div id="ui">CASH: $<span id="coin-count">0</span></div>
+        
+        <div id="player" class="car-body" style="left: 80px;">
+            <div class="mirrors"><div></div><div></div></div>
+        </div>
+
+        <div id="overlay">
+            <h1 style="color: #2de02d;">WRECKED!</h1>
+            <button onclick="openShop()" style="background: #00f2ff;">UPGRADE CAR</button>
+            <button onclick="location.reload()" style="margin-top: 10px; background:#fff;">RETRY</button>
+        </div>
+
+        <div id="shop-menu">
+            <h2 style="color: #ffcc00;">TUNING SHOP</h2>
+            <div class="shop-item">
+                <span>GREEN (Value: $<span id="price-green">10</span>)</span>
+                <button onclick="buyCar('green')" id="btn-green">BUY</button>
+            </div>
+            <div class="shop-item">
+                <span>RED (Value: $<span id="price-red">20</span>)</span>
+                <button onclick="buyCar('red')" id="btn-red">BUY</button>
+            </div>
+            <p style="font-size: 12px; color: #888;">*Buying doubles the next price!</p>
+            <button onclick="closeShop()" style="margin-top:20px; background:#ff4444; color:white;">BACK</button>
+        </div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const coinDisp = document.getElementById('coin-count');
+        const overlay = document.getElementById('overlay');
+        const shopMenu = document.getElementById('shop-menu');
+
+        // Initial Data
+        let totalCoins = parseInt(localStorage.getItem('savedCoins')) || 0;
+        let priceGreen = parseInt(localStorage.getItem('pGreen')) || 10;
+        let priceRed = parseInt(localStorage.getItem('pRed')) || 20;
+
+        let playerLane = 0;
+        const lanes = [80, 275];
+        let speed = 6;
+        let gameActive = true;
+
+        function initUI() {
+            coinDisp.innerText = totalCoins;
+            document.getElementById('price-green').innerText = priceGreen;
+            document.getElementById('price-red').innerText = priceRed;
+            const color = localStorage.getItem('playerColor') || '#00f2ff';
+            player.style.background = color;
+            player.style.boxShadow = `0 0 25px ${color}`;
+        }
+
+        initUI();
+
+        function handleInput(e) {
+            if (e.code === 'Space' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') switchLane();
+        }
+
+        function switchLane() {
+            if (!gameActive) return;
+            playerLane = playerLane === 0 ? 1 : 0;
+            player.style.left = lanes[playerLane] + 'px';
+        }
+
+        function buyCar(type) {
+            let price = (type === 'green') ? priceGreen : priceRed;
+            let color = (type === 'green') ? '#39ff14' : '#ff1100';
+
+            if (totalCoins >= price) {
+                totalCoins -= price;
+                
+                // Double the value for next time
+                if (type === 'green') {
+                    priceGreen *= 2;
+                    localStorage.setItem('pGreen', priceGreen);
+                } else {
+                    priceRed *= 2;
+                    localStorage.setItem('pRed', priceRed);
+                }
+
+                localStorage.setItem('savedCoins', totalCoins);
+                localStorage.setItem('playerColor', color);
+                
+                initUI();
+                alert("CAR UPGRADED! Next price doubled.");
+            } else {
+                alert("NOT ENOUGH CASH!");
+            }
+        }
+
+        function openShop() { shopMenu.style.display = 'flex'; overlay.style.display = 'none'; }
+        function closeShop() { shopMenu.style.display = 'none'; overlay.style.display = 'flex'; }
+
+        function spawn() {
+            if (!gameActive) return;
+            const isCoin = Math.random() > 0.4;
+            const obj = document.createElement('div');
+            const lane = Math.floor(Math.random() * 2);
+            
+            obj.className = isCoin ? 'coin' : 'car-body enemy';
+            if (isCoin) obj.innerText = '$';
+            else obj.innerHTML = '<div class="mirrors"><div></div><div></div></div>';
+
+            obj.style.left = (isCoin ? lanes[lane] + 10 : lanes[lane]) + 'px';
+            obj.style.top = '-100px';
+            document.getElementById('game-board').appendChild(obj);
+
+            let top = -100;
+            const loop = setInterval(() => {
+                if (!gameActive) { clearInterval(loop); obj.remove(); return; }
+                top += speed;
+                obj.style.top = top + 'px';
+
+                const p = player.getBoundingClientRect();
+                const o = obj.getBoundingClientRect();
+
+                if (p.left < o.right && p.right > o.left && p.top < o.bottom && p.bottom > o.top) {
+                    if (isCoin) {
+                        totalCoins++;
+                        localStorage.setItem('savedCoins', totalCoins);
+                        coinDisp.innerText = totalCoins;
+                        obj.remove();
+                        clearInterval(loop);
+                    } else {
+                        gameActive = false;
+                        overlay.style.display = 'flex';
+                    }
+                }
+                if (top > 650) { clearInterval(loop); obj.remove(); }
+            }, 10);
+
+            speed += 0.02;
+            setTimeout(spawn, 1000);
+        }
+
+        spawn();
+    </script>
+</body>
+</html>
